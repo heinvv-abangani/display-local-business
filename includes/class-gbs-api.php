@@ -12,6 +12,16 @@ class GBS_API {
 	}
 
 	public function search_places( $location, $radius, $type ) {
+		// Create cache key based on search parameters
+		$cache_key = 'gbs_search_' . md5( $location . '_' . $radius . '_' . $type );
+		
+		// Try to get cached results first
+		$cached_results = get_transient( $cache_key );
+		if ( $cached_results !== false ) {
+			error_log( 'GBS: Using cached results for search' );
+			return $cached_results;
+		}
+
 		$url = add_query_arg(
 			[
 				'location' => $location,
@@ -78,10 +88,25 @@ class GBS_API {
 		}
 
 		error_log( 'GBS: Found ' . count( $results ) . ' results' );
+		
+		// Cache the results for 1 hour (3600 seconds)
+		set_transient( $cache_key, $results, 3600 );
+		error_log( 'GBS: Cached search results for 1 hour' );
+		
 		return $results;
 	}
 
 	public function get_place_details( $place_id ) {
+		// Create cache key for place details
+		$cache_key = 'gbs_place_' . $place_id;
+		
+		// Try to get cached details first
+		$cached_details = get_transient( $cache_key );
+		if ( $cached_details !== false ) {
+			error_log( 'GBS: Using cached place details for ' . $place_id );
+			return $cached_details;
+		}
+
 		$fields = implode( ',', [
 			'name',
 			'website',
@@ -117,7 +142,13 @@ class GBS_API {
 
 		$result = $data['result'];
 
-		return [
+		// Debug: Log photos information
+		error_log( 'GBS: Photos available for ' . $place_id . ': ' . ( isset( $result['photos'] ) ? count( $result['photos'] ) : '0' ) );
+		if ( isset( $result['photos'][0]['photo_reference'] ) ) {
+			error_log( 'GBS: Photo reference: ' . substr( $result['photos'][0]['photo_reference'], 0, 20 ) . '...' );
+		}
+
+		$place_details = [
 			'place_id' => $place_id,
 			'name'     => $result['name'] ?? '',
 			'address'  => $result['formatted_address'] ?? '',
@@ -131,6 +162,19 @@ class GBS_API {
 				: '',
 			'about'    => $result['editorial_summary']['overview'] ?? '',
 		];
+
+		// Debug: Log final logo URL
+		if ( ! empty( $place_details['logo'] ) ) {
+			error_log( 'GBS: Generated logo URL: ' . $place_details['logo'] );
+		} else {
+			error_log( 'GBS: No logo URL generated for ' . $place_id );
+		}
+
+		// Cache place details for 24 hours (86400 seconds)
+		set_transient( $cache_key, $place_details, 86400 );
+		error_log( 'GBS: Cached place details for ' . $place_id . ' for 24 hours' );
+
+		return $place_details;
 	}
 
 	private function get_photo_url( $photo_reference ) {

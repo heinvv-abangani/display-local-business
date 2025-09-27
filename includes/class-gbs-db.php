@@ -24,10 +24,10 @@ class GBS_DB {
 			address text,
 			rating float,
 			reviews int,
-			website varchar(255),
+			website text,
 			phone varchar(50),
 			category varchar(255),
-			logo varchar(255),
+			logo text,
 			about text,
 			created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
 			PRIMARY KEY  (id),
@@ -35,14 +35,43 @@ class GBS_DB {
 		) $charset_collate;";
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		dbDelta( $sql );
+		$result = dbDelta( $sql );
+		
+		// Debug: Log table creation
+		error_log( 'GBS DB: Table creation result: ' . print_r( $result, true ) );
+		
+		// Check if table exists
+		$table_exists = $wpdb->get_var( "SHOW TABLES LIKE '$table'" );
+		error_log( 'GBS DB: Table exists check: ' . ( $table_exists ? 'YES' : 'NO' ) );
+	}
+
+	public static function table_exists() {
+		global $wpdb;
+		$table = self::table_name();
+		return $wpdb->get_var( "SHOW TABLES LIKE '$table'" ) === $table;
+	}
+
+	public static function update_table_structure() {
+		global $wpdb;
+		$table = self::table_name();
+		
+		// Update logo column to TEXT
+		$wpdb->query( "ALTER TABLE $table MODIFY COLUMN logo TEXT" );
+		
+		// Update website column to TEXT
+		$wpdb->query( "ALTER TABLE $table MODIFY COLUMN website TEXT" );
+		
+		error_log( 'GBS DB: Updated table structure for longer URLs' );
 	}
 
 	public static function insert_lead( $data ) {
 		global $wpdb;
 		$table = self::table_name();
 
-		$wpdb->replace( $table, [
+		// Debug: Log the data being inserted
+		error_log( 'GBS DB: Attempting to insert lead: ' . json_encode( $data ) );
+
+		$result = $wpdb->replace( $table, [
 			'place_id' => $data['place_id'] ?? '',
 			'name'     => $data['name'] ?? '',
 			'address'  => $data['address'] ?? '',
@@ -54,6 +83,16 @@ class GBS_DB {
 			'logo'     => $data['logo'] ?? '',
 			'about'    => $data['about'] ?? '',
 		] );
+
+		// Debug: Check for database errors
+		if ( $wpdb->last_error ) {
+			error_log( 'GBS DB Error: ' . $wpdb->last_error );
+			error_log( 'GBS DB Query: ' . $wpdb->last_query );
+			return false;
+		}
+
+		error_log( 'GBS DB: Successfully inserted/updated lead. Affected rows: ' . $wpdb->rows_affected );
+		return $result;
 	}
 
 	public static function get_leads( $limit = 50, $filters = [] ) {
